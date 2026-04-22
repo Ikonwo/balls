@@ -7,7 +7,7 @@ from tkinter import messagebox
 
 # Connecting to the server
 
-def write(value):
+def write_varint(value):
     result = b''
     while True:
         byte = value & 0x7F
@@ -19,7 +19,7 @@ def write(value):
             break
     return result
 
-def read(sock):
+def read_varint(sock):
     result = 0
     shift = 0
     while True:
