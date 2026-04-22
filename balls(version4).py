@@ -30,6 +30,8 @@ def read_varint(sock):
             break
     return result
 
+# Writes the Minecraft "Handshake" packet, as described in
+# https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Handshake
 def handshake(host, port):
     packet = b''
     packet += write(0x00)
@@ -40,15 +42,26 @@ def handshake(host, port):
     packet += write(1)
     return write(len(packet)) + packet
 
+# Writes the Minecraft "Status Request" packet, as described in
+# https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Status_Request
 def request():
     packet = b''
     packet += write(0x00)
     return write(len(packet)) + packet
 
-def send(sock, host, port):
+# Carries out the client-side flow for requesting
+# the server list ping data from a server.
+# 
+# https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping
+def request_status(sock, host, port):
     sock.sendall(handshake(host, port))
     sock.sendall(request())
 
+# Reads out the JSON Server List Ping data
+# into a string, after the status has been
+# requested.
+#
+# https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Status_Response
 def read_response(sock):
     packet_len = read(sock)
     packet_id = read(sock)
@@ -92,7 +105,7 @@ class Server: # This is here so I get the extra grade :D
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((self.host, self.port))
 
-        send(s, self.host, self.port)
+        request_status(s, self.host, self.port)
         response = json.loads(read_response(s))
 
         self.players_online = response['players']['online']
