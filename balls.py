@@ -1,3 +1,9 @@
+"""
+Minecraft Server Info Tool
+Connects to servers in order to grab info such as max players, version, and players online and compiles it into a list format.
+"""
+
+
 # Imports
 import socket
 import json
@@ -6,7 +12,10 @@ from tkinter import messagebox
 
 
 # Connecting to the server
-
+""" 
+Encodes an integer as a Minecraft VarInt.
+These use 7 bytes of data with the 8th byte indicating whether there is more data to come, keeping small amounts of data conpact.
+"""
 def write_varint(value):
     result = b''
     while True:
@@ -19,6 +28,11 @@ def write_varint(value):
             break
     return result
 
+"""
+Decodes Minecraft VarInt back into integers.
+This takes the bytes of data we encoded and produces plain integers that our program can read, using a reverse
+process of the write_varint function.
+"""
 def read_varint(sock):
     result = 0
     shift = 0
@@ -30,8 +44,9 @@ def read_varint(sock):
             break
     return result
 
-# Writes the Minecraft "Handshake" packet, as described in
-# https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Handshake
+""" Writes the Minecraft "Handshake" packet, as described in
+  https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Handshake
+"""
 def handshake(host, port):
     packet = b''
     packet += write_varint(0x00)
@@ -42,26 +57,28 @@ def handshake(host, port):
     packet += write_varint(1)
     return write_varint(len(packet)) + packet
 
-# Writes the Minecraft "Status Request" packet, as described in
-# https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Status_Request
+""" Writes the Minecraft "Status Request" packet, as described in
+ https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Status_Request
+ """
 def request():
     packet = b''
     packet += write_varint(0x00)
     return write_varint(len(packet)) + packet
 
-# Carries out the client-side flow for requesting
-# the server list ping data from a server.
-# 
-# https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping
+""" Carries out the client-side flow for requesting
+ the server list ping data from a server.
+ https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping
+ """
 def request_status(sock, host, port):
     sock.sendall(handshake(host, port))
     sock.sendall(request())
 
-# Reads out the JSON Server List Ping data
-# into a string, after the status has been
-# requested.
-#
-# https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Status_Response
+""" Reads out the JSON Server List Ping data
+ into a string, after the status has been
+ requested.
+
+ https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Status_Response
+"""
 def read_response(sock):
     packet_len = read_varint(sock)
     packet_id = read_varint(sock)
@@ -76,9 +93,15 @@ def read_response(sock):
 
 def save_server(stuff): 
     server_stuff = load_server()
+    existing_host = set(server_stuff.keys())
+    if stuff['host'] not in existing_host:
+        pass
+    else:
+        pass
     server_stuff[stuff['host']] = stuff
     with open('servers.json', 'w') as f:
         json.dump(server_stuff, f)
+
 
 # Loading JSON File
 
@@ -131,6 +154,17 @@ class Server:
 
 # GUI
 
+def auto_ping():
+    info = load_server()
+    for key, value in info.items():
+        try:
+            server = Server(value['host'], value['port'])
+            server.ping()
+        except:
+            pass
+    server_list()
+    app.after(60000, auto_ping)
+
 def add_server():
     port = input_port.get().strip()
     host = input_address.get().strip().lower()
@@ -180,6 +214,7 @@ button.pack(pady=5)
 Scrollable_Frame = customtkinter.CTkScrollableFrame(app, label_text="Servers", height=150)
 Scrollable_Frame.pack(pady=5, fill='both', expand=True)
 server_list()
+auto_ping()
 app.mainloop()
 
 
