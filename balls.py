@@ -34,20 +34,20 @@ def read_varint(sock):
 # https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Handshake
 def handshake(host, port):
     packet = b''
-    packet += write(0x00)
-    packet += write(767)
-    packet += write(len(host))
+    packet += write_varint(0x00)
+    packet += write_varint(767)
+    packet += write_varint(len(host))
     packet += host.encode('utf-8')
     packet += port.to_bytes(2, byteorder='big')
-    packet += write(1)
-    return write(len(packet)) + packet
+    packet += write_varint(1)
+    return write_varint(len(packet)) + packet
 
 # Writes the Minecraft "Status Request" packet, as described in
 # https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Status_Request
 def request():
     packet = b''
-    packet += write(0x00)
-    return write(len(packet)) + packet
+    packet += write_varint(0x00)
+    return write_varint(len(packet)) + packet
 
 # Carries out the client-side flow for requesting
 # the server list ping data from a server.
@@ -63,9 +63,9 @@ def request_status(sock, host, port):
 #
 # https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Status_Response
 def read_response(sock):
-    packet_len = read(sock)
-    packet_id = read(sock)
-    json_len = read(sock)
+    packet_len = read_varint(sock)
+    packet_id = read_varint(sock)
+    json_len = read_varint(sock)
     stuff = b''
     while len(stuff) < json_len:
         stuff += sock.recv(json_len - len(stuff))
@@ -74,14 +74,11 @@ def read_response(sock):
 
 # Saving JSON file
 
-def Save_server(stuff): 
+def save_server(stuff): 
     server_stuff = load_server()
     server_stuff[stuff['host']] = stuff
     with open('servers.json', 'w') as f:
         json.dump(server_stuff, f)
-
-
-
 
 # Loading JSON File
 
@@ -93,10 +90,18 @@ def load_server():
         return {}
 
 
-def del_server():
-    pass # I'm gonna add this later when I need to :D
+def del_server(host):
+    confirmation = messagebox.askyesno("Delete Server", f"Are you sure?")
+    if confirmation:
+        servers = load_server()
+        del servers[host]
 
-class Server: # This is here so I get the extra grade :D
+        with open('servers.json', 'w') as f:
+            json.dump(servers, f)
+        server_list()
+    
+
+class Server:
     def __init__(self, host, port):
         self.host = host
         self.port = port
@@ -121,8 +126,7 @@ class Server: # This is here so I get the extra grade :D
                 'version': self.version,
                 'name': self.name
             }
-        Save_server(server_data)
-        print("Saved!")
+        save_server(server_data)
         return response
 
 # GUI
@@ -148,11 +152,17 @@ def add_server():
             messagebox.showerror("Error", "Could not connect to server.")
 
 def server_list():
+    for widget in Scrollable_Frame.winfo_children():
+        widget.destroy()
+
     list_data = load_server()
+
     for key, value in list_data.items():
         server_label = customtkinter.CTkLabel(Scrollable_Frame, text=f"{value['name']} - {value['players_online']} - {value['max_players']} - {value['version']}")
         server_label.pack(pady=20)
-        print(list_data)
+        delete = customtkinter.CTkButton(Scrollable_Frame, text='delete', width = 60, command=lambda h=key: del_server(h))
+        delete.pack(pady=2)
+
 
 app = customtkinter.CTk()
 app.title('Minecraft Server Thing')
@@ -173,6 +183,3 @@ server_list()
 app.mainloop()
 
 
-# What I need to do
-# Testing
-# GUI
