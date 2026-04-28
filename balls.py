@@ -93,18 +93,31 @@ def read_response(sock):
 
 # Saving JSON file
 
+"""
+ Saves data to separate json file in a set
+ both updating existing ones and adding new ones when necessary.
+"""
+
 def save_server(stuff): 
-    server_stuff = load_server()
-    existing_host = set(server_stuff.keys()) # Set used rather than a list as it is faster than searching list 
-    if stuff['host'] not in existing_host:
-        server_stuff[stuff['host']] = stuff
-    else:
-        server_stuff[stuff['host']].update(stuff)
-    with open('servers.json', 'w') as f:
-        json.dump(server_stuff, f)
+    try:
+        server_stuff = load_server()
+        existing_host = set(server_stuff.keys()) # Set used rather than a list as it is faster than searching list 
+        if stuff['host'] not in existing_host:
+            server_stuff[stuff['host']] = stuff
+        else:
+            server_stuff[stuff['host']].update(stuff)
+        with open('servers.json', 'w') as f:
+            json.dump(server_stuff, f)
+    except:
+        messagebox.showerror("Error", "Could not save data.")
 
 
 # Loading JSON File
+
+"""
+Loads server data from servers.json 
+so that users don't have to reinput data themselves.
+"""
 
 def load_server():
     try:
@@ -113,23 +126,44 @@ def load_server():
     except FileNotFoundError:
         return {}
 
+"""
+del_server fucntion prompts user then deletes data from the set to avoid unnecessary cluttering.
+"""
 
 def del_server(host):
     confirmation = messagebox.askyesno("Delete Server", f"Are you sure?")
     if confirmation:
-        servers = load_server()
-        del servers[host]
+        try:
+            servers = load_server()
+            del servers[host]
 
-        with open('servers.json', 'w') as f:
-            json.dump(servers, f)
-        server_list()
+            with open('servers.json', 'w') as f:
+                json.dump(servers, f)
+            server_list()
+        except KeyError:
+            messagebox.showerror("Error", "Server not found.")
+        except:
+            messagebox.showerror("Error", "Unable to delete server.")
     
+"""
+Represents the server connection logic so each server 
+handles its own state.
+"""
 
 class Server:
+    """
+    Stores the port and host so reconnection can
+    occur without external parameters.
+    """
     def __init__(self, host, port):
         self.host = host
         self.port = port
     
+    """
+    png connects to server and retrieves status data
+    saving it to the file.
+    """
+
     def ping(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((self.host, self.port))
@@ -151,11 +185,18 @@ class Server:
                 'name': self.name
             }
         save_server(server_data)
+        s.close()
         return response
+       
 
 # GUI
 
 offline = set()
+
+"""
+Automatically pings each server every minute while the program is active 
+to allow for a live showcase of each servers analytics.
+"""
 
 def auto_ping():
     info = load_server()
@@ -168,6 +209,10 @@ def auto_ping():
             offline.add(key)
     server_list()
     app.after(60000, auto_ping)
+
+"""
+Validates user input then attempts to add a new set of data to the list.
+"""
 
 def add_server():
     port = input_port.get().strip()
@@ -193,6 +238,10 @@ def add_server():
         except:
             messagebox.showerror("Error", "Could not connect to server.")
 
+"""
+Shows a responsive list of the saved json server data.
+"""
+
 def server_list():
     for widget in Scrollable_Frame.winfo_children():
         widget.destroy()
@@ -200,15 +249,15 @@ def server_list():
     list_data = load_server()
 
     for key, value in list_data.items():
-        server_label = customtkinter.CTkLabel(Scrollable_Frame, text=f"{value['name']} - {value['players_online']} - {value['max_players']} - {value['version']}")
+        if key in offline:
+            server_label = customtkinter.CTkLabel(Scrollable_Frame, text=f"{key} - offline", text_color="red")
+        else:
+            server_label = customtkinter.CTkLabel(Scrollable_Frame, text=f"{value['name']} - {value['players_online']} - {value['max_players']} - {value['version']}")
         server_label.pack(pady=20)
         delete = customtkinter.CTkButton(Scrollable_Frame, text='delete', width = 60, command=lambda h=key: del_server(h))
         delete.pack(pady=2)
 
-    if key in offline:
-        server_label = customtkinter.CTkLabel(Scrollable_Frame, text=f"{value['host']} - offline", text_color="red")
-    else:
-        server_label = customtkinter.CTkLabel(Scrollable_Frame, text=f"{value['name']} - {value['players_online']} - {value['max_players']} - {value['version']}")
+   
     
 
 
