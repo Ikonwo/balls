@@ -18,14 +18,15 @@ These use 7 bytes of data with the 8th byte indicating whether there is more dat
 """
 def write_varint(value):
     result = b''
-    while True:
+    active = True
+    while active:
         byte = value & 0x7F
         value = value >> 7
         if value != 0:
             byte |= 0x80
         result += bytes([byte])
         if value == 0:
-            break
+            active = False
     return result
 
 """
@@ -36,12 +37,13 @@ process of the write_varint function.
 def read_varint(sock):
     result = 0
     shift = 0
-    while True:
+    active = True
+    while active:
         byte = ord(sock.recv(1))
         result |= (byte & 0x7F) << shift
         shift += 7
         if not (byte & 0x80):
-            break
+            active = False
     return result
 
 """ Writes the Minecraft "Handshake" packet, as described in
@@ -93,12 +95,11 @@ def read_response(sock):
 
 def save_server(stuff): 
     server_stuff = load_server()
-    existing_host = set(server_stuff.keys())
+    existing_host = set(server_stuff.keys()) # Set used rather than a list as it is faster than searching list 
     if stuff['host'] not in existing_host:
-        pass
+        server_stuff[stuff['host']] = stuff
     else:
-        pass
-    server_stuff[stuff['host']] = stuff
+        server_stuff[stuff['host']].update(stuff)
     with open('servers.json', 'w') as f:
         json.dump(server_stuff, f)
 
@@ -154,14 +155,17 @@ class Server:
 
 # GUI
 
+offline = set()
+
 def auto_ping():
     info = load_server()
     for key, value in info.items():
         try:
             server = Server(value['host'], value['port'])
             server.ping()
+            offline.discard(key)
         except:
-            pass
+            offline.add(key)
     server_list()
     app.after(60000, auto_ping)
 
@@ -180,8 +184,12 @@ def add_server():
         connect = Server(host, port)
         try:
             connect.ping()
-            messagebox.showinfo("Success", "Server Added")
+            messagebox.showinfo("Success", "Server Added.")
             server_list()
+        except ConnectionRefusedError:
+            messagebox.showerror("Error", "Server Offline.")
+        except TimeoutError:
+            messagebox.showerror("Error", "Connection timed out.")
         except:
             messagebox.showerror("Error", "Could not connect to server.")
 
@@ -196,6 +204,12 @@ def server_list():
         server_label.pack(pady=20)
         delete = customtkinter.CTkButton(Scrollable_Frame, text='delete', width = 60, command=lambda h=key: del_server(h))
         delete.pack(pady=2)
+
+    if key in offline:
+        server_label = customtkinter.CTkLabel(Scrollable_Frame, text=f"{value['host']} - offline", text_color="red")
+    else:
+        server_label = customtkinter.CTkLabel(Scrollable_Frame, text=f"{value['name']} - {value['players_online']} - {value['max_players']} - {value['version']}")
+    
 
 
 app = customtkinter.CTk()
