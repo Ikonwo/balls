@@ -166,6 +166,7 @@ class Server:
 
     def ping(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(10)
         s.connect((self.host, self.port))
 
         request_status(s, self.host, self.port)
