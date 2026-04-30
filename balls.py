@@ -12,11 +12,13 @@ from tkinter import messagebox
 
 
 # Connecting to the server
-""" 
-Encodes an integer as a Minecraft VarInt.
-These use 7 bytes of data with the 8th byte indicating whether there is more data to come, keeping small amounts of data conpact.
-"""
+
 def write_varint(value):
+    """ 
+    Encodes an integer as a Minecraft VarInt.
+    These use 7 bytes of data with the 8th byte indicating whether there is more data to come, keeping small amounts of data conpact.
+    Minecraft requires this format.
+    """
     result = b''
     active = True
     while active:
@@ -29,12 +31,11 @@ def write_varint(value):
             active = False
     return result
 
-"""
-Decodes Minecraft VarInt back into integers.
-This takes the bytes of data we encoded and produces plain integers that our program can read, using a reverse
-process of the write_varint function.
-"""
 def read_varint(sock):
+    """
+    Reads bytes one at a time rather than all at once due to VarInt's variable length.
+    Until we see an 8th bit unset we don't know when to end, so we signal an end once we see that.
+    """
     result = 0
     shift = 0
     active = True
@@ -46,10 +47,13 @@ def read_varint(sock):
             active = False
     return result
 
-""" Writes the Minecraft "Handshake" packet, as described in
-  https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Handshake
-"""
 def handshake(host, port):
+    """ 
+    Writes the Minecraft "Handshake" packet, as described in
+      https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Handshake
+      Sends server address and protocol version because the server needs this context before it
+      can respond to any requests.
+    """
     packet = b''
     packet += write_varint(0x00)
     packet += write_varint(767)
@@ -59,29 +63,36 @@ def handshake(host, port):
     packet += write_varint(1)
     return write_varint(len(packet)) + packet
 
-""" Writes the Minecraft "Status Request" packet, as described in
- https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Status_Request
- """
 def request():
+    """ Writes the Minecraft "Status Request" packet, as described in
+     https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Status_Request
+     tells the server we don't want to long in but rather get status data,
+     otherwise the server won't send back what we need.
+     """
     packet = b''
     packet += write_varint(0x00)
     return write_varint(len(packet)) + packet
 
-""" Carries out the client-side flow for requesting
- the server list ping data from a server.
- https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping
- """
 def request_status(sock, host, port):
+    """ 
+    Carries out the client-side flow for requesting
+     the server list ping data from a server.
+     https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping
+     Server expects the handshake and status request to come back together 
+     before it will send back any response data.
+     """
     sock.sendall(handshake(host, port))
     sock.sendall(request())
 
-""" Reads out the JSON Server List Ping data
- into a string, after the status has been
- requested.
-
- https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Status_Response
-"""
 def read_response(sock):
+    """ 
+    Reads out the JSON Server List Ping data
+     into a string, after the status has been
+     requested.
+     https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Status_Response
+     large servers send more data than a single recv can handle so we loop multiple times
+     ensures we get a complete response regardless of size.
+    """
     packet_len = read_varint(sock)
     packet_id = read_varint(sock)
     json_len = read_varint(sock)
@@ -93,12 +104,13 @@ def read_response(sock):
 
 # Saving JSON file
 
-"""
- Saves data to separate json file in a set
- both updating existing ones and adding new ones when necessary.
-"""
-
 def save_server(stuff): 
+    """
+     Saves data to separate json file
+     both updating existing ones and adding new ones when necessary.
+     Loads existing data before saving so the new server doesn't 
+     overwrite the previous servers. 
+    """
     try:
         server_stuff = load_server()
         existing_host = set(server_stuff.keys()) # Set used rather than a list as it is faster than searching list 
@@ -114,23 +126,23 @@ def save_server(stuff):
 
 # Loading JSON File
 
-"""
-Loads server data from servers.json 
-so that users don't have to reinput data themselves.
-"""
-
 def load_server():
+    """
+    Loads server data from servers.json 
+    so that users don't have to reinput data themselves.
+    Also handles first run case where no servers have been found yet.
+    """
     try:
         with open('servers.json', 'r') as f:
             return json.load(f)
     except FileNotFoundError:
         return {}
 
-"""
-del_server fucntion prompts user then deletes data from the set to avoid unnecessary cluttering.
-"""
-
 def del_server(host):
+    """
+    del_server fucntion prompts user then deletes data from the dict to avoid unnecessary cluttering.
+    The prompt is here to avoid accidental data deletion.
+    """
     confirmation = messagebox.askyesno("Delete Server", f"Are you sure?")
     if confirmation:
         try:
@@ -144,27 +156,28 @@ def del_server(host):
             messagebox.showerror("Error", "Server not found.")
         except:
             messagebox.showerror("Error", "Unable to delete server.")
-    
-"""
-Represents the server connection logic so each server 
-handles its own state.
-"""
 
 class Server:
     """
-    Stores the port and host so reconnection can
-    occur without external parameters.
+    Represents the server connection logic so each server 
+    handles its own state without interfering with each other
+    and causing unexpected problems.
     """
     def __init__(self, host, port):
+        """
+        Stores the port and host so reconnection can
+        occur without external parameters.
+        """
         self.host = host
         self.port = port
     
-    """
-    png connects to server and retrieves status data
-    saving it to the file.
-    """
+
 
     def ping(self):
+        """
+        Opens a fresh socket each ping to avoid using stale connections
+        and closes it after use to free up resources.
+        """
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(10)
         s.connect((self.host, self.port))
@@ -194,12 +207,12 @@ class Server:
 
 offline = set()
 
-"""
-Automatically pings each server every minute while the program is active 
-to allow for a live showcase of each servers analytics.
-"""
-
 def auto_ping():
+    """
+    Automatically pings each server every minute rather than continuously to avoid overwhelming servers
+    with requests. Uses a set to track offline servers so the display can show their status accurately.
+    Used a set rather than dict as it is more efficient with servers going online and offline frequently.
+    """
     info = load_server()
     for key, value in info.items():
         try:
@@ -211,11 +224,12 @@ def auto_ping():
     server_list()
     app.after(60000, auto_ping)
 
-"""
-Validates user input then attempts to add a new set of data to the list.
-"""
-
 def add_server():
+    """
+    Validates user input before attempting a network connection
+    to avoid unnecessary socket overhead on invalid data.
+    Uses specific exception types to provide clear data to user.
+    """
     port = input_port.get().strip()
     host = input_address.get().strip().lower()
 
@@ -239,11 +253,14 @@ def add_server():
         except:
             messagebox.showerror("Error", "Could not connect to server.")
 
-"""
-Shows a responsive list of the saved json server data.
-"""
 
 def server_list():
+    """
+    Destroys and recreates all widgets on refresh to avoid 
+    duplicate entries appearing.
+    Checks for servers that are offline and displays as such 
+    to give appropriate information to users.
+    """
     for widget in Scrollable_Frame.winfo_children():
         widget.destroy()
 
